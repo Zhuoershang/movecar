@@ -1,0 +1,10 @@
+name = "movecar"
+# name = "v20251104"
+main = "movecar.js"
+compatibility_date = "2025-11-04"
+keep_vars = true
+
+# 触发构建1
+[[kv_namespaces]]
+binding = ""    # 现在变量名是 tunnel 而不是 KV
+id = "96262ef11e664d9c8ccb9c615a04f4db" # 替换为你的实际 KV ID
