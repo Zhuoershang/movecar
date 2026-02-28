@@ -707,16 +707,16 @@ function renderMainPage(origin, userKey) {
     function updateUI(data) {
       console.log('updateUI called with data:', data);
       
-      // 1. 更新通知发送时间（实时计算）
+      // 1. 更新通知发送时间（实时计算）- 修复全角括号为半角
       const timeDisplay = document.getElementById('sentTimeDisplay');
       if (data.sentAt) {
         const seconds = Math.floor((Date.now() - data.sentAt) / 1000);
-        timeDisplay.innerText = `（发送于 ${seconds} 秒前）`;
+        timeDisplay.innerText = `(发送于 ${seconds} 秒前)`; // 全角→半角
       } else {
         timeDisplay.innerText = '';
       }
     
-      // 2. 更新车主回复时间（新增：实时计算）
+      // 2. 更新车主回复时间（新增：实时计算）- 修复全角括号为半角
       if (data.status === 'confirmed') {
         document.getElementById('ownerFeedback').classList.remove('hidden');
         const replyMsg = data.ownerLocation?.replyMessage || '车主已确认，马上到';
@@ -724,7 +724,7 @@ function renderMainPage(origin, userKey) {
         const replySeconds = data.ownerLocation?.replyAt 
           ? Math.floor((Date.now() - data.ownerLocation.replyAt) / 1000) 
           : 0;
-        document.getElementById('ownerReplyMsg').innerText = `车主回复（${replySeconds} 秒前）：${replyMsg}`;
+        document.getElementById('ownerReplyMsg').innerText = `车主回复 (${replySeconds} 秒前)：${replyMsg}`; // 全角→半角
         if (data.ownerLocation) {
           document.getElementById('ownerAmap').href = data.ownerLocation.amapUrl || '#';
           document.getElementById('ownerApple').href = data.ownerLocation.appleUrl || '#';
@@ -827,18 +827,18 @@ function renderOwnerPage(userKey) {
     function formatTimeAgo(timestamp) {
       if (!timestamp) return '';
       const seconds = Math.floor((Date.now() - timestamp) / 1000);
-      return `${seconds} 秒前`;
+      return `${seconds} 秒前`; // 此处无括号，无需改，但下面调用处需要检查
     }
-
+    
     // 新增：实时更新时间显示
     function updateTimeDisplays() {
-      // 更新扫码者消息时间
+      // 更新扫码者消息时间 - 修复全角括号为半角
       if (visitorSentAt) {
-        document.getElementById('visitorMsgTime').innerText = `发送于 ${formatTimeAgo(visitorSentAt)}`;
+        document.getElementById('visitorMsgTime').innerText = `发送于 ${formatTimeAgo(visitorSentAt)}`; // 无全角括号，无需改
       }
-      // 更新自己回复的时间
+      // 更新自己回复的时间 - 修复全角括号为半角
       if (myReplyAt) {
-        document.getElementById('myReplyTime').innerText = `您的回复发送于 ${formatTimeAgo(myReplyAt)}`;
+        document.getElementById('myReplyTime').innerText = `您的回复发送于 ${formatTimeAgo(myReplyAt)}`; // 无全角括号，无需改
       }
     }
 
