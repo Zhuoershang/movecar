@@ -97,6 +97,8 @@ async function handleNotify(request, url, userKey) {
     const ppToken = getUserConfig(userKey, 'PUSHPLUS_TOKEN');
     const barkUrl = getUserConfig(userKey, 'BARK_URL');
     const email   = getUserConfig(userKey, 'EMAIL');
+    const resendApiKey = getUserConfig("", 'RESEND_API_KEY');//直接获取resend全局key，所有用户通用
+    const resendFrom = getUserConfig("", 'RESEND_FROM') || 'noreply_huang@xian5.de5.net'; // 默认测试邮箱
     
     const carTitle = getUserConfig(userKey, 'CAR_TITLE') || '车主';
     const baseDomain = (typeof globalThis.EXTERNAL_URL !== 'undefined' && globalThis.EXTERNAL_URL) ? globalThis.EXTERNAL_URL.replace(/\/$/, "") : url.origin;
@@ -120,7 +122,37 @@ async function handleNotify(request, url, userKey) {
     if (barkUrl) tasks.push(fetch(barkUrl + "/" + encodeURIComponent('挪车请求') + "/" + encodeURIComponent(notifyText) + "?url=" + encodeURIComponent(confirmUrl)));
     // 待增加邮件推送
     // if (email) tasks.push()
-
+    if (email && resendApiKey) {
+        // 构造邮件 HTML 内容（转义用户输入）
+      const escapedMessage = escapeHtml(body.message || '车旁有人等待');
+      let locationHtml = '';
+      if (maps) {
+        locationHtml = `<p><strong>扫码者位置：</strong><br>
+          <a href="${maps.amapUrl}">高德地图</a> | 
+          <a href="${maps.appleUrl}">苹果地图</a></p>`;
+      }
+      const mailHtml = `
+        <h2>🚗 挪车请求【${carTitle}】</h2>
+        <p><strong>留言：</strong>${escapedMessage}</p>
+        ${locationHtml}
+        <p><a href="${confirmUrl}" style="display:inline-block; padding:10px 20px; background:#0093E9; color:#fff; text-decoration:none; border-radius:5px;">点击处理挪车</a></p>
+      `;
+      tasks.push(
+        fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${resendApiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            from: resendFrom,
+            to: [email],
+            subject: `挪车请求：${carTitle}`,
+            html: mailHtml
+          })
+        }).catch(e => console.error('Resend error:', e))
+      );
+    };
     await Promise.all(tasks);
     return new Response(JSON.stringify({ success: true }));
   } catch (e) {
