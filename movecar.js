@@ -374,7 +374,7 @@ function renderMainPage(origin, userKey) {
     </div>
     <!-- 倒计时显示区域（默认隐藏） -->
     <div class="countdown-msg" id="countdownMsg"></div>
-    <button id="notifyBtn" class="btn-main" onclick="sendNotify()">🔔 发送通知</button>
+    <button id="notifyBtn" class="btn-main" onclick="sendNotify()">🔔 一键通知车主</button>
   </div>
 
   <!-- 成功界面 -->
@@ -690,7 +690,7 @@ function renderMainPage(origin, userKey) {
         } else { 
           alert(data.error); 
           btn.disabled = false; 
-          btn.innerText = '🔔 发送通知'; 
+          btn.innerText = '🔔 一键通知车主'; 
         }
       } catch(e) { 
         alert('服务暂时不可用'); 
