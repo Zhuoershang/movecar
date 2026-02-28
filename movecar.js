@@ -513,7 +513,7 @@ function renderMainPage(origin, userKey) {
           p => {
             userLoc = { lat: p.coords.latitude, lng: p.coords.longitude };
             locationReady = true;
-            document.getElementById('locStatus').innerText = '📍 位置已锁定(获取成功)';
+            document.getElementById('locStatus').innerText = '📍 已获取位置 ✅';
             document.getElementById('locStatus').style.color = '#10b981';
             
             // 清除倒计时
@@ -535,7 +535,7 @@ function renderMainPage(origin, userKey) {
           // 失败回调
           err => {
             console.warn('定位失败:', err);
-            document.getElementById('locStatus').innerText = '📍 无法获取精确位置';
+            document.getElementById('locStatus').innerText = '📍 无法获取精确位置 🚫';
             document.getElementById('locStatus').style.color = '#ef4444';
             
             // 显示重试按钮
@@ -607,7 +607,7 @@ function renderMainPage(origin, userKey) {
           // 成功
           userLoc = { lat: p.coords.latitude, lng: p.coords.longitude };
           locationReady = true;
-          document.getElementById('locStatus').innerText = '📍 位置已锁定(获取成功)';
+          document.getElementById('locStatus').innerText = '📍 已获取位置 ✅';
           document.getElementById('locStatus').style.color = '#10b981';
           
           // 清除倒计时
