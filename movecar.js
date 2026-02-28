@@ -276,6 +276,7 @@ function renderMainPage(origin, userKey) {
     .btn-main { background: #0093E9; color: white; border: none; padding: 18px; border-radius: 18px; font-size: 18px; font-weight: bold; cursor: pointer; width: 100%; }
     .btn-main:disabled { background: #94a3b8; cursor: not-allowed; }
     .btn-phone { background: #ef4444; color: white; border: none; padding: 15px; border-radius: 15px; text-decoration: none; text-align: center; font-weight: bold; display: block; margin-top: 10px; }
+    .btn-retry { background: #f59e0b; color: white; border: none; padding: 8px 16px; border-radius: 20px; font-size: 13px; cursor: pointer; margin-left: 10px; }
     .hidden { display: none !important; }
     .map-links { display: flex; gap: 10px; margin-top: 15px; }
     .map-btn { flex: 1; padding: 14px; border-radius: 14px; text-align: center; text-decoration: none; color: white; font-weight: bold; }
@@ -286,18 +287,10 @@ function renderMainPage(origin, userKey) {
     .code-inputs input:focus { border-color: #0093E9; }
     .error-msg { color: #ef4444; font-size: 14px; min-height: 20px; }
     .verify-btn { background: #10b981; color: white; border: none; padding: 16px; border-radius: 18px; font-size: 18px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 10px; }
-    /* 倒计时提示 - 特意设置背景色确保可见 */
-    .countdown-msg { 
-      font-size: 14px; 
-      color: #f97316; 
-      text-align: center; 
-      margin: 8px 0; 
-      min-height: 24px;
-      background-color: #fff3e0; 
-      padding: 6px 12px;
-      border-radius: 20px;
-      font-weight: 500;
-    }
+    /* 定位状态行布局 */
+    .loc-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+    .loc-text { font-size: 13px; color: #94a3b8; }
+    .countdown-msg { font-size: 14px; color: #f97316; text-align: center; margin: 8px 0; min-height: 24px; background-color: #fff3e0; padding: 6px 12px; border-radius: 20px; font-weight: 500; display: none; } /* 默认隐藏 */
   </style>
 </head>
 <body>
@@ -335,8 +328,14 @@ function renderMainPage(origin, userKey) {
         <div class="tag" onclick="setTag('这是我的车位，我要用了，谢谢')">🚧 占我车位</div>
       </div>
     </div>
-    <div class="card" id="locStatus" style="font-size:13px; color:#94a3b8; text-align:center;">定位请求中...</div>
-    <!-- 倒计时显示区域 -->
+    <!-- 定位状态卡片，增加重试按钮 -->
+    <div class="card" id="locStatusCard">
+      <div class="loc-row">
+        <span class="loc-text" id="locStatus">定位请求中...</span>
+        <button id="retryLocationBtn" class="btn-retry" style="display:none;" onclick="retryLocation()">重新获取</button>
+      </div>
+    </div>
+    <!-- 倒计时显示区域（默认隐藏） -->
     <div class="countdown-msg" id="countdownMsg"></div>
     <button id="notifyBtn" class="btn-main" onclick="sendNotify()">🔔 发送通知</button>
   </div>
@@ -439,28 +438,52 @@ function renderMainPage(origin, userKey) {
       }
       countdown = 30;
       locationReady = false;
+      
+      // 隐藏倒计时提示
+      const msgDiv = document.getElementById('countdownMsg');
+      if (msgDiv) msgDiv.style.display = 'none';
+      
+      // 隐藏重试按钮
+      const retryBtn = document.getElementById('retryLocationBtn');
+      if (retryBtn) retryBtn.style.display = 'none';
 
       checkActiveSession();
 
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
+          // 成功回调
           p => {
             userLoc = { lat: p.coords.latitude, lng: p.coords.longitude };
             locationReady = true;
             document.getElementById('locStatus').innerText = '📍 位置已锁定';
             document.getElementById('locStatus').style.color = '#10b981';
+            
+            // 清除倒计时
             if (countdownInterval) {
               clearInterval(countdownInterval);
               countdownInterval = null;
             }
-            document.getElementById('notifyBtn').disabled = false;
+            // 隐藏倒计时提示
             const msgDiv = document.getElementById('countdownMsg');
-            if (msgDiv) msgDiv.innerText = '';
+            if (msgDiv) msgDiv.style.display = 'none';
+            
+            // 隐藏重试按钮
+            const retryBtn = document.getElementById('retryLocationBtn');
+            if (retryBtn) retryBtn.style.display = 'none';
+            
+            // 启用通知按钮
+            document.getElementById('notifyBtn').disabled = false;
           },
+          // 失败回调
           err => {
             console.warn('定位失败:', err);
             document.getElementById('locStatus').innerText = '📍 无法获取精确位置';
             document.getElementById('locStatus').style.color = '#ef4444';
+            
+            // 显示重试按钮
+            const retryBtn = document.getElementById('retryLocationBtn');
+            if (retryBtn) retryBtn.style.display = 'inline-block';
+            
             if (!locationReady && !countdownInterval) {
               startCountdown();
             }
@@ -469,6 +492,12 @@ function renderMainPage(origin, userKey) {
         );
       } else {
         document.getElementById('locStatus').innerText = '📍 浏览器不支持定位';
+        document.getElementById('locStatus').style.color = '#ef4444';
+        
+        // 显示重试按钮（虽然不支持定位，但点击重试也不会改变，但可以保留提示）
+        const retryBtn = document.getElementById('retryLocationBtn');
+        if (retryBtn) retryBtn.style.display = 'inline-block';
+        
         if (!locationReady && !countdownInterval) {
           startCountdown();
         }
@@ -479,32 +508,83 @@ function renderMainPage(origin, userKey) {
     function startCountdown() {
       countdown = 30;
       const btn = document.getElementById('notifyBtn');
-      let msgDiv = document.getElementById('countdownMsg');
+      const msgDiv = document.getElementById('countdownMsg');
       
-      // 如果消息元素不存在，动态创建一个（后备方案）
-      if (!msgDiv) {
-        console.error('错误：未找到 #countdownMsg 元素，动态创建');
-        msgDiv = document.createElement('div');
-        msgDiv.id = 'countdownMsg';
-        msgDiv.className = 'countdown-msg';
-        btn.parentNode.insertBefore(msgDiv, btn);
-      }
+      if (!msgDiv) return; // 安全起见
       
+      // 显示倒计时区域
+      msgDiv.style.display = 'block';
       btn.disabled = true;
       msgDiv.innerText = \`定位获取失败，等待 \${countdown} 秒后可发送\`;
 
       countdownInterval = setInterval(() => {
         countdown--;
-        console.log('倒计时:', countdown); // 可在控制台查看
+        console.log('倒计时:', countdown);
         if (countdown <= 0) {
           clearInterval(countdownInterval);
           countdownInterval = null;
           btn.disabled = false;
           msgDiv.innerText = '现在可以发送通知（位置未获取）';
+          // 倒计时结束后，仍然显示重试按钮（如果之前显示了）
+          // 不隐藏倒计时提示，保留提示信息
         } else {
           msgDiv.innerText = \`定位获取失败，等待 \${countdown} 秒后可发送\`;
         }
       }, 1000);
+    }
+
+    // 重试获取位置
+    function retryLocation() {
+      if (!navigator.geolocation) {
+        alert('浏览器不支持定位功能');
+        return;
+      }
+      
+      // 显示重试中状态
+      const retryBtn = document.getElementById('retryLocationBtn');
+      retryBtn.disabled = true;
+      retryBtn.innerText = '获取中...';
+      
+      navigator.geolocation.getCurrentPosition(
+        p => {
+          // 成功
+          userLoc = { lat: p.coords.latitude, lng: p.coords.longitude };
+          locationReady = true;
+          document.getElementById('locStatus').innerText = '📍 位置已锁定';
+          document.getElementById('locStatus').style.color = '#10b981';
+          
+          // 清除倒计时
+          if (countdownInterval) {
+            clearInterval(countdownInterval);
+            countdownInterval = null;
+          }
+          // 隐藏倒计时提示
+          const msgDiv = document.getElementById('countdownMsg');
+          if (msgDiv) msgDiv.style.display = 'none';
+          
+          // 隐藏重试按钮
+          retryBtn.style.display = 'none';
+          
+          // 启用通知按钮
+          document.getElementById('notifyBtn').disabled = false;
+          
+          // 恢复按钮文字（以备下次显示）
+          retryBtn.disabled = false;
+          retryBtn.innerText = '重新获取';
+        },
+        err => {
+          console.warn('重试定位失败:', err);
+          alert('再次获取位置失败，请稍后重试或等待倒计时结束');
+          // 恢复按钮
+          retryBtn.disabled = false;
+          retryBtn.innerText = '重新获取';
+          // 如果倒计时未启动，可能需要启动？但通常已经在倒计时中
+          if (!locationReady && !countdownInterval) {
+            startCountdown();
+          }
+        },
+        { timeout: 10000 }
+      );
     }
 
     async function checkActiveSession() {
