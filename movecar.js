@@ -265,7 +265,6 @@ function renderMainPage(origin, userKey) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
   <title>挪车通知</title>
   <style>
-    /* 样式保持不变，略 */
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
     body { font-family: -apple-system, sans-serif; background: linear-gradient(160deg, #0093E9 0%, #80D0C7 100%); min-height: 100vh; padding: 20px; display: flex; justify-content: center; }
     .container { width: 100%; max-width: 500px; display: flex; flex-direction: column; gap: 15px; }
@@ -320,7 +319,7 @@ function renderMainPage(origin, userKey) {
       <p style="color:#64748b; font-size:14px; margin-top:5px">提示：车主将收到即时提醒</p>
     </div>
     <div class="card">
-      <textarea id="msgInput" placeholder="请输入留言...\n(获取定位后，更快通知车主哦！)"></textarea>
+      <textarea id="msgInput" placeholder="请输入留言...\n(获取定位后通知，车主回复更快哦！)"></textarea>
       <div style="margin-top:5px">
         <div class="tag" onclick="setTag('麻烦挪下车，谢谢')">🚧 挡路了</div>
         <div class="tag" onclick="setTag('有急事外出，速来')">🏃 急事</div>
@@ -380,20 +379,21 @@ function renderMainPage(origin, userKey) {
       localStorage.setItem('movecar_session_' + userKey, sessionId);
     }
 
-    // ---------- 新增：检查是否已验证过 ----------
-    const verifiedKey = 'verified_' + userKey;
-    const isVerified = sessionStorage.getItem(verifiedKey) === 'true';
+    // 验证状态持久化（刷新页面后不再重复验证）
+    const verifiedFlag = 'verified_' + userKey;
+    let isVerified = sessionStorage.getItem(verifiedFlag) === 'true';
 
-    if (!needVerify || isVerified) {
-      // 如果不需要验证，或已经验证过，直接显示主界面
-      if (needVerify && isVerified) {
-        // 隐藏验证界面，显示主界面
-        document.getElementById('verifyView').style.display = 'none';
-        document.getElementById('mainView').classList.remove('hidden');
-      }
+    if (!needVerify) {
       initializeMainView();
     } else {
-      initializeVerifyView();
+      if (isVerified) {
+        // 已经验证过，直接显示主界面
+        document.getElementById('verifyView').style.display = 'none';
+        document.getElementById('mainView').classList.remove('hidden');
+        initializeMainView();
+      } else {
+        initializeVerifyView();
+      }
     }
 
     // 验证界面初始化
@@ -424,9 +424,8 @@ function renderMainPage(origin, userKey) {
           return;
         }
         if (code.toUpperCase() === correctLastFour.toUpperCase()) {
-          // ---------- 新增：存储验证成功标记 ----------
-          sessionStorage.setItem(verifiedKey, 'true');
-          
+          // 验证成功，存储标记
+          sessionStorage.setItem(verifiedFlag, 'true');
           document.getElementById('verifyView').style.display = 'none';
           document.getElementById('mainView').classList.remove('hidden');
           initializeMainView();
@@ -444,8 +443,17 @@ function renderMainPage(origin, userKey) {
       });
     }
 
-    // 主界面初始化（保持不变）
-    function initializeMainView() {
+    // 主界面初始化
+    async function initializeMainView() {
+      // 先检查是否有活跃会话
+      const hasActiveSession = await checkActiveSession();
+      if (hasActiveSession) {
+        // 已有活跃会话，直接显示成功界面，跳过后续定位请求
+        console.log('检测到活跃会话，跳过定位请求');
+        return;
+      }
+
+      // 无活跃会话，继续正常的定位初始化
       if (countdownInterval) {
         clearInterval(countdownInterval);
         countdownInterval = null;
@@ -460,8 +468,6 @@ function renderMainPage(origin, userKey) {
       // 隐藏重试按钮
       const retryBtn = document.getElementById('retryLocationBtn');
       if (retryBtn) retryBtn.style.display = 'none';
-
-      checkActiveSession();
 
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
@@ -518,7 +524,7 @@ function renderMainPage(origin, userKey) {
       }
     }
 
-    // 启动倒计时（保持不变）
+    // 启动倒计时
     function startCountdown() {
       countdown = 30;
       const btn = document.getElementById('notifyBtn');
@@ -540,14 +546,13 @@ function renderMainPage(origin, userKey) {
           btn.disabled = false;
           msgDiv.innerText = '现在可以发送通知（位置未获取）';
           // 倒计时结束后，仍然显示重试按钮（如果之前显示了）
-          // 不隐藏倒计时提示，保留提示信息
         } else {
           msgDiv.innerText = \`定位获取失败，等待 \${countdown} 秒后可发送\`;
         }
       }, 1000);
     }
 
-    // 重试获取位置（保持不变）
+    // 重试获取位置
     function retryLocation() {
       if (!navigator.geolocation) {
         alert('浏览器不支持定位功能');
@@ -582,7 +587,7 @@ function renderMainPage(origin, userKey) {
           // 启用通知按钮
           document.getElementById('notifyBtn').disabled = false;
           
-          // 恢复按钮文字（以备下次显示）
+          // 恢复按钮文字
           retryBtn.disabled = false;
           retryBtn.innerText = '重新获取';
         },
@@ -592,7 +597,7 @@ function renderMainPage(origin, userKey) {
           // 恢复按钮
           retryBtn.disabled = false;
           retryBtn.innerText = '重新获取';
-          // 如果倒计时未启动，可能需要启动？但通常已经在倒计时中
+          // 如果倒计时未启动，可能需要启动？
           if (!locationReady && !countdownInterval) {
             startCountdown();
           }
@@ -601,15 +606,21 @@ function renderMainPage(origin, userKey) {
       );
     }
 
+    // 检查活跃会话，返回 true 表示有活跃会话并已显示成功界面
     async function checkActiveSession() {
       try {
         const res = await fetch('/api/check-status?u=' + userKey + '&s=' + sessionId);
         const data = await res.json();
         if (data.status && data.status !== 'none') {
+          console.log('检测到活跃会话，状态:', data.status);
           showSuccess(data);
           pollStatus();
+          return true;
         }
-      } catch(e){}
+      } catch(e) {
+        console.warn('检查会话失败', e);
+      }
+      return false;
     }
 
     function setTag(t) { document.getElementById('msgInput').value = t; }
@@ -655,22 +666,33 @@ function renderMainPage(origin, userKey) {
     }
 
     function updateUI(data) {
+      console.log('updateUI called with data:', data);
       if (data.status === 'confirmed') {
         document.getElementById('ownerFeedback').classList.remove('hidden');
         if (data.ownerLocation) {
           document.getElementById('ownerAmap').href = data.ownerLocation.amapUrl;
           document.getElementById('ownerApple').href = data.ownerLocation.appleUrl;
+          console.log('设置车主位置链接:', data.ownerLocation);
+        } else {
+          console.log('车主位置为空');
         }
+      } else {
+        // 如果状态不是 confirmed，确保 ownerFeedback 隐藏（可选）
+        // document.getElementById('ownerFeedback').classList.add('hidden');
       }
     }
 
     function pollStatus() {
-      setInterval(async () => {
+      // 清除可能存在的旧轮询
+      if (window.pollInterval) clearInterval(window.pollInterval);
+      window.pollInterval = setInterval(async () => {
         try {
           const res = await fetch('/api/check-status?u=' + userKey + '&s=' + sessionId);
           const data = await res.json();
           updateUI(data);
-        } catch(e){}
+        } catch(e) {
+          console.warn('轮询失败', e);
+        }
       }, 5000);
     }
   </script>
