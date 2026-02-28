@@ -285,12 +285,13 @@ function renderMainPage(origin, userKey) {
       <p style="color:#64748b; font-size:14px; margin-top:5px">提示：车主将收到即时提醒</p>
     </div>
     <div class="card">
-      <textarea id="msgInput" placeholder="请输入留言..."></textarea>
+      <textarea id="msgInput" placeholder="请输入留言...（留言后一分钟内没收到车主回信，再拨打电话提醒哦！）"></textarea>
       <div style="margin-top:5px">
         <div class="tag" onclick="setTag('麻烦挪下车，谢谢')">🚧 挡路了</div>
         <div class="tag" onclick="setTag('有急事外出，速来')">🏃 急事</div>
-        <div class="tag" onclick="setTag('我在你车旁，请查看位置，速速前来！')">🏃 发送我的位置</div>
         <div class="tag" onclick="setTag('有叔叔贴条，速度来挪车！')">⏱️ 温馨提醒</div>
+        <div class="tag" onclick="setTag('请挪车，我在你车旁，请查看位置，尽快前来！')">🏃 发送我的位置</div>
+        <div class="tag" onclick="setTag('这是我的车位，我要用了，谢谢')">🚧 占我车位</div>
       </div>
     </div>
     <div class="card" id="locStatus" style="font-size:13px; color:#94a3b8; text-align:center;">定位请求中...</div>
