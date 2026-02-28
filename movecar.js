@@ -200,7 +200,7 @@ async function handleGetLocation(userKey) {
   const data = await MOVE_CAR_STATUS.get("loc_" + userKey);
   return new Response(data || '{}');
 }
-
+/**
 async function handleOwnerConfirmAction(request, userKey) {
   const body = await request.json();
   const data = await MOVE_CAR_STATUS.get("status_" + userKey);
@@ -212,6 +212,28 @@ async function handleOwnerConfirmAction(request, userKey) {
       await MOVE_CAR_STATUS.put("owner_loc_" + userKey, JSON.stringify({ ...body.location, ...urls }), { expirationTtl: 600 });
     }
     // 确认后状态继续保持，直到 SESSION_TTL 到期
+    await MOVE_CAR_STATUS.put("status_" + userKey, JSON.stringify(statusObj), { expirationTtl: 600 });
+  }
+  return new Response(JSON.stringify({ success: true }));
+}
+**/
+// 增强版的车主回应函数
+async function handleOwnerConfirmAction(request, userKey) {
+  const body = await request.json();
+  const data = await MOVE_CAR_STATUS.get("status_" + userKey);
+  if (data) {
+    const statusObj = JSON.parse(data);
+    statusObj.status = 'confirmed';
+    // 准备车主信息对象
+    let ownerInfo = {};
+    if (body.location) {
+      const urls = generateMapUrls(body.location.lat, body.location.lng);
+      ownerInfo = { ...body.location, ...urls };
+    }
+    if (body.replyMessage) {
+      ownerInfo.replyMessage = body.replyMessage;
+    }
+    await MOVE_CAR_STATUS.put("owner_loc_" + userKey, JSON.stringify(ownerInfo), { expirationTtl: 600 });
     await MOVE_CAR_STATUS.put("status_" + userKey, JSON.stringify(statusObj), { expirationTtl: 600 });
   }
   return new Response(JSON.stringify({ success: true }));
@@ -352,7 +374,7 @@ function renderMainPage(origin, userKey) {
     </div>
     <div id="ownerFeedback" class="card hidden" style="text-align:center; border: 2.5px solid #10b981;">
       <div style="font-size:40px">👨‍✈️</div>
-      <h3 style="color:#059669">车主回复：马上到</h3>
+      <h3 id="ownerReplyMsg" style="color:#059669">车主回复：马上到</h3>
       <div class="map-links">
         <a id="ownerAmap" href="#" class="map-btn amap">高德地图</a>
         <a id="ownerApple" href="#" class="map-btn apple">苹果地图</a>
@@ -672,16 +694,15 @@ function renderMainPage(origin, userKey) {
       console.log('updateUI called with data:', data);
       if (data.status === 'confirmed') {
         document.getElementById('ownerFeedback').classList.remove('hidden');
+        const replyMsg = data.ownerLocation?.replyMessage || '车主已确认，马上到';
+        document.getElementById('ownerReplyMsg').innerText = '车主回复：' + replyMsg;
         if (data.ownerLocation) {
-          document.getElementById('ownerAmap').href = data.ownerLocation.amapUrl;
-          document.getElementById('ownerApple').href = data.ownerLocation.appleUrl;
+          document.getElementById('ownerAmap').href = data.ownerLocation.amapUrl || '#';
+          document.getElementById('ownerApple').href = data.ownerLocation.appleUrl || '#';
           console.log('设置车主位置链接:', data.ownerLocation);
         } else {
           console.log('车主位置为空');
         }
-      } else {
-        // 如果状态不是 confirmed，确保 ownerFeedback 隐藏（可选）
-        // document.getElementById('ownerFeedback').classList.add('hidden');
       }
     }
 
@@ -697,6 +718,157 @@ function renderMainPage(origin, userKey) {
           console.warn('轮询失败', e);
         }
       }, 5000);
+    }
+  </script>
+</body>
+</html>
+`, { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
+}
+
+/** 界面渲染：车主页 **/
+function renderOwnerPage(userKey) {
+  const carTitle = getUserConfig(userKey, 'CAR_TITLE') || '车主';
+  return new Response(`
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>挪车处理</title>
+  <style>
+    body { font-family: sans-serif; background: #4f46e5; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin:0; padding:20px; }
+    .card { background: white; padding: 35px 25px; border-radius: 30px; text-align: center; width: 100%; max-width: 400px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
+    .btn { background: #10b981; color: white; border: none; width: 100%; padding: 20px; border-radius: 18px; font-size: 18px; font-weight: bold; cursor: pointer; margin-top: 20px; box-shadow: 0 5px 15px rgba(16,185,129,0.3); }
+    .btn-secondary { background: #6b7280; }
+    .map-box { background: #f8fafc; padding: 20px; border-radius: 20px; margin-top: 15px; border: 1px solid #e2e8f0; display: none; }
+    .map-btn { display: inline-block; padding: 12px 18px; background: #2563eb; color: white; text-decoration: none; border-radius: 12px; margin: 5px; font-size: 14px; }
+    .reply-section { margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 15px; }
+    .fold-btn { background: #e2e8f0; color: #1e293b; border: none; padding: 10px; border-radius: 30px; font-size: 14px; cursor: pointer; width: 100%; margin-bottom: 10px; }
+    .fold-content { display: none; }
+    .textarea-reply { width: 100%; min-height: 80px; border: 1px solid #ccc; border-radius: 14px; padding: 12px; font-size: 16px; margin-top: 10px; resize: vertical; }
+    .tag { display: inline-block; background: #f1f5f9; padding: 8px 12px; border-radius: 20px; font-size: 14px; margin: 5px 3px; cursor: pointer; color:#475569; }
+    .tag:hover { background: #e2e8f0; }
+    .btn-send { background: #2563eb; color: white; border: none; padding: 16px; border-radius: 18px; font-size: 16px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 15px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div style="font-size:50px">📣</div>
+    <h2 style="margin:15px 0; color:#1e293b">${carTitle}</h2>
+    <p style="color:#64748b">有人正在车旁等您，请确认：</p>
+    <div id="mapArea" class="map-box">
+      <p style="font-size:14px; color:#2563eb; margin-bottom:12px; font-weight:bold">对方实时位置 📍</p>
+      <a id="amapLink" href="#" class="map-btn">高德地图</a>
+      <a id="appleLink" href="#" class="map-btn" style="background:#000">苹果地图</a>
+    </div>
+
+    <!-- 默认按钮 -->
+    <button id="confirmBtn" class="btn" onclick="confirmMove()">🚀 我已知晓，马上过去</button>
+
+    <!-- 折叠按钮和区域 -->
+    <div class="reply-section">
+      <button id="foldBtn" class="fold-btn" onclick="toggleFold()">✏️ 发送其他回复</button>
+      <div id="foldContent" class="fold-content">
+        <textarea id="customReply" class="textarea-reply" placeholder="请输入您的回复..."></textarea>
+        <div style="margin-top:5px">
+          <span class="tag" onclick="setReplyTag('定位错误，请确认')">🚫 定位错误</span>
+          <span class="tag" onclick="setReplyTag('暂时无法离开，稍后')">⏳ 暂时无法离开</span>
+          <span class="tag" onclick="setReplyTag('请稍等，马上到')">🏃 马上到</span>
+          <span class="tag" onclick="setReplyTag('请拨打联系电话')">📞 拨打电话</span>
+        </div>
+        <button id="sendCustomBtn" class="btn-send" onclick="sendCustomReply()">📨 发送回复</button>
+      </div>
+    </div>
+  </div>
+  <script>
+    const userKey = "${userKey}";
+    let foldOpen = false;
+
+    window.onload = async () => {
+      // 获取扫码者位置
+      const res = await fetch('/api/get-location?u=' + userKey);
+      const data = await res.json();
+      if(data.amapUrl) {
+        document.getElementById('mapArea').style.display = 'block';
+        document.getElementById('amapLink').href = data.amapUrl;
+        document.getElementById('appleLink').href = data.appleUrl;
+      }
+    };
+
+    // 切换折叠
+    function toggleFold() {
+      foldOpen = !foldOpen;
+      document.getElementById('foldContent').style.display = foldOpen ? 'block' : 'none';
+      document.getElementById('foldBtn').innerText = foldOpen ? '🔽 收起' : '✏️ 发送其他回复';
+    }
+
+    // 设置快捷回复到文本框
+    function setReplyTag(text) {
+      document.getElementById('customReply').value = text;
+    }
+
+    // 获取车主位置并发送确认（带回复）
+    async function sendConfirmWithReply(replyMessage) {
+      const btn = event?.target || document.getElementById('confirmBtn');
+      const originalText = btn.innerText;
+      btn.disabled = true;
+      btn.innerText = '发送中...';
+
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          async p => {
+            const location = { lat: p.coords.latitude, lng: p.coords.longitude };
+            await sendConfirmRequest(location, replyMessage);
+            btn.disabled = false;
+            btn.innerText = originalText;
+          },
+          async () => {
+            // 无法获取位置，仍发送（不带位置）
+            await sendConfirmRequest(null, replyMessage);
+            btn.disabled = false;
+            btn.innerText = originalText;
+          }
+        );
+      } else {
+        // 不支持定位
+        await sendConfirmRequest(null, replyMessage);
+        btn.disabled = false;
+        btn.innerText = originalText;
+      }
+    }
+
+    // 发送确认请求到后端
+    async function sendConfirmRequest(location, replyMessage) {
+      try {
+        const res = await fetch('/api/owner-confirm?u=' + userKey, {
+          method: 'POST',
+          body: JSON.stringify({ location, replyMessage })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('回复已发送');
+          if (foldOpen) toggleFold(); // 发送成功后自动收起
+        } else {
+          alert('发送失败，请重试');
+        }
+      } catch (e) {
+        alert('网络错误');
+      }
+    }
+
+    // 默认的“我已知晓马上过去”按钮调用
+    function confirmMove() {
+      sendConfirmWithReply('马上到');
+    }
+
+    // 自定义回复发送
+    function sendCustomReply() {
+      const reply = document.getElementById('customReply').value.trim();
+      if (!reply) {
+        alert('请输入回复内容');
+        return;
+      }
+      sendConfirmWithReply(reply);
     }
   </script>
 </body>
@@ -862,8 +1034,8 @@ function renderMainPage(origin, userKey) {
 </html>
 `, { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
 }
-**/
-/** 界面渲染：车主页 **/
+
+// 界面渲染：车主页
 function renderOwnerPage(userKey) {
   const carTitle = getUserConfig(userKey, 'CAR_TITLE') || '车主';
   return new Response(`
@@ -920,3 +1092,4 @@ function renderOwnerPage(userKey) {
 </html>
 `, { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
 }
+**/
