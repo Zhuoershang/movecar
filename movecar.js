@@ -119,8 +119,9 @@ async function handleNotify(request, url, userKey) {
     // 存储当前会话信息，有效期设为 30 分钟
     const statusData = { status: 'waiting', sessionId: sessionId };
     
+    let maps = null;
     if (body.location && body.location.lat) {
-      const maps = generateMapUrls(body.location.lat, body.location.lng);
+      maps = generateMapUrls(body.location.lat, body.location.lng);
       await MOVE_CAR_STATUS.put("loc_" + userKey, JSON.stringify({ ...body.location, ...maps }), { expirationTtl: CONFIG.KV_TTL });
     }
 
