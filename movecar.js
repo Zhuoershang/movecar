@@ -631,7 +631,7 @@ function renderMainPage(origin, userKey) {
         },
         err => {
           console.warn('重试定位失败:', err);
-          alert('再次获取位置失败，请稍后重试或等待倒计时结束');
+          alert('再次获取位置失败，请允许定位权限，稍后重试或等待倒计时结束');
           // 恢复按钮
           retryBtn.disabled = false;
           retryBtn.innerText = '重新获取';
