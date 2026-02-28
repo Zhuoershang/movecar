@@ -288,8 +288,9 @@ function renderMainPage(origin, userKey) {
       <textarea id="msgInput" placeholder="请输入留言..."></textarea>
       <div style="margin-top:5px">
         <div class="tag" onclick="setTag('麻烦挪下车，谢谢')">🚧 挡路了</div>
-        <div class="tag" onclick="setTag('临时停靠，请包涵')">⏱️ 临停</div>
         <div class="tag" onclick="setTag('有急事外出，速来')">🏃 急事</div>
+        <div class="tag" onclick="setTag('我在你车旁，请查看位置，速速前来！')">🏃 发送我的位置</div>
+        <div class="tag" onclick="setTag('有叔叔贴条，速度来挪车！')">⏱️ 温馨提醒</div>
       </div>
     </div>
     <div class="card" id="locStatus" style="font-size:13px; color:#94a3b8; text-align:center;">定位请求中...</div>
