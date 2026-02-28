@@ -132,7 +132,17 @@ async function handleNotify(request, url, userKey) {
     let maps = null;
     if (body.location && body.location.lat) {
       maps = generateMapUrls(body.location.lat, body.location.lng);
-      await MOVE_CAR_STATUS.put("loc_" + userKey, JSON.stringify({ ...body.location, ...maps }), { expirationTtl: CONFIG.KV_TTL });
+      // 新增：存储留言内容
+      await MOVE_CAR_STATUS.put("loc_" + userKey, JSON.stringify({ 
+        ...body.location, 
+        ...maps,
+        message: body.message || '车旁有人等待' // 保存扫码者的留言
+      }), { expirationTtl: CONFIG.KV_TTL });
+    } else {
+      // 无定位时也存储留言
+      await MOVE_CAR_STATUS.put("loc_" + userKey, JSON.stringify({ 
+        message: body.message || '车旁有人等待' 
+      }), { expirationTtl: CONFIG.KV_TTL });
     }
 
     await MOVE_CAR_STATUS.put("status_" + userKey, JSON.stringify(statusData), { expirationTtl: CONFIG.SESSION_TTL });
@@ -233,6 +243,8 @@ async function handleOwnerConfirmAction(request, userKey) {
     if (body.replyMessage) {
       ownerInfo.replyMessage = body.replyMessage;
     }
+    // 新增：记录车主回复的时间戳
+    ownerInfo.replyAt = Date.now();
     await MOVE_CAR_STATUS.put("owner_loc_" + userKey, JSON.stringify(ownerInfo), { expirationTtl: 600 });
     await MOVE_CAR_STATUS.put("status_" + userKey, JSON.stringify(statusObj), { expirationTtl: 600 });
   }
@@ -695,7 +707,7 @@ function renderMainPage(origin, userKey) {
     function updateUI(data) {
       console.log('updateUI called with data:', data);
       
-      // 更新发送时间显示
+      // 1. 更新通知发送时间（实时计算）
       const timeDisplay = document.getElementById('sentTimeDisplay');
       if (data.sentAt) {
         const seconds = Math.floor((Date.now() - data.sentAt) / 1000);
@@ -704,16 +716,18 @@ function renderMainPage(origin, userKey) {
         timeDisplay.innerText = '';
       }
     
+      // 2. 更新车主回复时间（新增：实时计算）
       if (data.status === 'confirmed') {
         document.getElementById('ownerFeedback').classList.remove('hidden');
         const replyMsg = data.ownerLocation?.replyMessage || '车主已确认，马上到';
-        document.getElementById('ownerReplyMsg').innerText = '车主回复：' + replyMsg;
+        // 计算回复的时间差
+        const replySeconds = data.ownerLocation?.replyAt 
+          ? Math.floor((Date.now() - data.ownerLocation.replyAt) / 1000) 
+          : 0;
+        document.getElementById('ownerReplyMsg').innerText = `车主回复（${replySeconds} 秒前）：${replyMsg}`;
         if (data.ownerLocation) {
           document.getElementById('ownerAmap').href = data.ownerLocation.amapUrl || '#';
           document.getElementById('ownerApple').href = data.ownerLocation.appleUrl || '#';
-          console.log('设置车主位置链接:', data.ownerLocation);
-        } else {
-          console.log('车主位置为空');
         }
       }
     }
@@ -761,12 +775,21 @@ function renderOwnerPage(userKey) {
     .tag { display: inline-block; background: #f1f5f9; padding: 8px 12px; border-radius: 20px; font-size: 14px; margin: 5px 3px; cursor: pointer; color:#475569; }
     .tag:hover { background: #e2e8f0; }
     .btn-send { background: #2563eb; color: white; border: none; padding: 16px; border-radius: 18px; font-size: 16px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 15px; }
+    /* 新增：时间样式 */
+    .time-text { font-size: 12px; color: #94a3b8; margin: 5px 0; }
+    .msg-box { background: #f1f5f9; padding: 15px; border-radius: 16px; margin: 10px 0; text-align: left; }
+    .msg-content { font-size: 16px; color: #1e293b; }
   </style>
 </head>
 <body>
   <div class="card">
     <div style="font-size:50px">📣</div>
     <h2 style="margin:15px 0; color:#1e293b">${carTitle}</h2>
+    <!-- 新增：显示扫码者的留言和时间 -->
+    <div id="visitorMsgBox" class="msg-box" style="display:none;">
+      <div class="msg-content" id="visitorMsg"></div>
+      <div class="time-text" id="visitorMsgTime"></div>
+    </div>
     <p style="color:#64748b">有人正在车旁等您，请确认：</p>
     <div id="mapArea" class="map-box">
       <p style="font-size:14px; color:#2563eb; margin-bottom:12px; font-weight:bold">对方实时位置 📍</p>
@@ -789,22 +812,60 @@ function renderOwnerPage(userKey) {
           <span class="tag" onclick="setReplyTag('请拨打联系电话')">📞 拨打电话</span>
         </div>
         <button id="sendCustomBtn" class="btn-send" onclick="sendCustomReply()">📨 发送回复</button>
+        <!-- 新增：显示自己的回复时间 -->
+        <div class="time-text" id="myReplyTime" style="display:none; margin-top:10px;"></div>
       </div>
     </div>
   </div>
   <script>
     const userKey = "${userKey}";
     let foldOpen = false;
+    let visitorSentAt = 0; // 扫码者发送时间戳
+    let myReplyAt = 0; // 自己回复的时间戳
+
+    // 新增：计算时间差并格式化
+    function formatTimeAgo(timestamp) {
+      if (!timestamp) return '';
+      const seconds = Math.floor((Date.now() - timestamp) / 1000);
+      return `${seconds} 秒前`;
+    }
+
+    // 新增：实时更新时间显示
+    function updateTimeDisplays() {
+      // 更新扫码者消息时间
+      if (visitorSentAt) {
+        document.getElementById('visitorMsgTime').innerText = `发送于 ${formatTimeAgo(visitorSentAt)}`;
+      }
+      // 更新自己回复的时间
+      if (myReplyAt) {
+        document.getElementById('myReplyTime').innerText = `您的回复发送于 ${formatTimeAgo(myReplyAt)}`;
+      }
+    }
 
     window.onload = async () => {
-      // 获取扫码者位置
-      const res = await fetch('/api/get-location?u=' + userKey);
-      const data = await res.json();
-      if(data.amapUrl) {
+      // 1. 获取扫码者位置和消息
+      const locRes = await fetch('/api/get-location?u=' + userKey);
+      const locData = await locRes.json();
+      if(locData.amapUrl) {
         document.getElementById('mapArea').style.display = 'block';
-        document.getElementById('amapLink').href = data.amapUrl;
-        document.getElementById('appleLink').href = data.appleUrl;
+        document.getElementById('amapLink').href = locData.amapUrl;
+        document.getElementById('appleLink').href = locData.appleUrl;
       }
+
+      // 2. 获取扫码者的消息和发送时间
+      const statusRes = await fetch('/api/check-status?u=' + userKey);
+      const statusData = await statusRes.json();
+      if (statusData.sentAt) {
+        visitorSentAt = statusData.sentAt;
+        // 获取留言（需要后端补充存储留言，这里先从locData兼容）
+        const visitorMsg = locData.message || '车旁有人等待';
+        document.getElementById('visitorMsg').innerText = visitorMsg;
+        document.getElementById('visitorMsgBox').style.display = 'block';
+      }
+
+      // 3. 实时更新时间
+      updateTimeDisplays();
+      setInterval(updateTimeDisplays, 1000);
     };
 
     // 切换折叠
@@ -826,6 +887,9 @@ function renderOwnerPage(userKey) {
       btn.disabled = true;
       btn.innerText = '发送中...';
 
+      // 记录回复时间戳
+      myReplyAt = Date.now();
+
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           async p => {
@@ -833,12 +897,17 @@ function renderOwnerPage(userKey) {
             await sendConfirmRequest(location, replyMessage);
             btn.disabled = false;
             btn.innerText = originalText;
+            // 显示回复时间
+            document.getElementById('myReplyTime').style.display = 'block';
+            updateTimeDisplays();
           },
           async () => {
             // 无法获取位置，仍发送（不带位置）
             await sendConfirmRequest(null, replyMessage);
             btn.disabled = false;
             btn.innerText = originalText;
+            document.getElementById('myReplyTime').style.display = 'block';
+            updateTimeDisplays();
           }
         );
       } else {
@@ -846,6 +915,8 @@ function renderOwnerPage(userKey) {
         await sendConfirmRequest(null, replyMessage);
         btn.disabled = false;
         btn.innerText = originalText;
+        document.getElementById('myReplyTime').style.display = 'block';
+        updateTimeDisplays();
       }
     }
 
