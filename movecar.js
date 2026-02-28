@@ -265,6 +265,7 @@ function renderMainPage(origin, userKey) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
   <title>挪车通知</title>
   <style>
+    /* 样式保持不变，略 */
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
     body { font-family: -apple-system, sans-serif; background: linear-gradient(160deg, #0093E9 0%, #80D0C7 100%); min-height: 100vh; padding: 20px; display: flex; justify-content: center; }
     .container { width: 100%; max-width: 500px; display: flex; flex-direction: column; gap: 15px; }
@@ -319,7 +320,7 @@ function renderMainPage(origin, userKey) {
       <p style="color:#64748b; font-size:14px; margin-top:5px">提示：车主将收到即时提醒</p>
     </div>
     <div class="card">
-      <textarea id="msgInput" placeholder="请输入留言..."></textarea>
+      <textarea id="msgInput" placeholder="请输入留言...\n(获取定位后，更快通知车主哦！)"></textarea>
       <div style="margin-top:5px">
         <div class="tag" onclick="setTag('麻烦挪下车，谢谢')">🚧 挡路了</div>
         <div class="tag" onclick="setTag('有急事外出，速来')">🏃 急事</div>
@@ -379,7 +380,17 @@ function renderMainPage(origin, userKey) {
       localStorage.setItem('movecar_session_' + userKey, sessionId);
     }
 
-    if (!needVerify) {
+    // ---------- 新增：检查是否已验证过 ----------
+    const verifiedKey = 'verified_' + userKey;
+    const isVerified = sessionStorage.getItem(verifiedKey) === 'true';
+
+    if (!needVerify || isVerified) {
+      // 如果不需要验证，或已经验证过，直接显示主界面
+      if (needVerify && isVerified) {
+        // 隐藏验证界面，显示主界面
+        document.getElementById('verifyView').style.display = 'none';
+        document.getElementById('mainView').classList.remove('hidden');
+      }
       initializeMainView();
     } else {
       initializeVerifyView();
@@ -413,6 +424,9 @@ function renderMainPage(origin, userKey) {
           return;
         }
         if (code.toUpperCase() === correctLastFour.toUpperCase()) {
+          // ---------- 新增：存储验证成功标记 ----------
+          sessionStorage.setItem(verifiedKey, 'true');
+          
           document.getElementById('verifyView').style.display = 'none';
           document.getElementById('mainView').classList.remove('hidden');
           initializeMainView();
@@ -430,7 +444,7 @@ function renderMainPage(origin, userKey) {
       });
     }
 
-    // 主界面初始化
+    // 主界面初始化（保持不变）
     function initializeMainView() {
       if (countdownInterval) {
         clearInterval(countdownInterval);
@@ -455,7 +469,7 @@ function renderMainPage(origin, userKey) {
           p => {
             userLoc = { lat: p.coords.latitude, lng: p.coords.longitude };
             locationReady = true;
-            document.getElementById('locStatus').innerText = '📍 位置已锁定';
+            document.getElementById('locStatus').innerText = '📍 位置已锁定(获取成功)';
             document.getElementById('locStatus').style.color = '#10b981';
             
             // 清除倒计时
@@ -504,7 +518,7 @@ function renderMainPage(origin, userKey) {
       }
     }
 
-    // 启动倒计时
+    // 启动倒计时（保持不变）
     function startCountdown() {
       countdown = 30;
       const btn = document.getElementById('notifyBtn');
@@ -533,7 +547,7 @@ function renderMainPage(origin, userKey) {
       }, 1000);
     }
 
-    // 重试获取位置
+    // 重试获取位置（保持不变）
     function retryLocation() {
       if (!navigator.geolocation) {
         alert('浏览器不支持定位功能');
@@ -550,7 +564,7 @@ function renderMainPage(origin, userKey) {
           // 成功
           userLoc = { lat: p.coords.latitude, lng: p.coords.longitude };
           locationReady = true;
-          document.getElementById('locStatus').innerText = '📍 位置已锁定';
+          document.getElementById('locStatus').innerText = '📍 位置已锁定(获取成功)';
           document.getElementById('locStatus').style.color = '#10b981';
           
           // 清除倒计时
@@ -605,7 +619,7 @@ function renderMainPage(origin, userKey) {
       
       // 位置未就绪且倒计时未结束，阻止发送
       if (!locationReady && countdown > 0) {
-        alert(\`尚未获取到您的位置，请等待 \${countdown} 秒后再试\`);
+        alert(\`尚未获取到您的位置，请给定位权限，或等待 \${countdown} 秒后再试\`);
         return;
       }
 
