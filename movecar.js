@@ -24,6 +24,12 @@ function escapeHtml(unsafe) {
 }
 
 async function handleRequest(request) {
+  // 安全防护
+  const country = request.cf?.country;
+  if (country && country !== 'CN') {
+    return new Response('Access Denied', { status: 403 });
+  }
+  
   const url = new URL(request.url)
   const path = url.pathname
   const userParam = url.searchParams.get('u') || 'default';
