@@ -248,14 +248,15 @@ function renderQRPage(origin, userKey) {
 }
 
 /** 界面渲染：扫码者页 **/
+/** 界面渲染：扫码者页 **/
 function renderMainPage(origin, userKey) {
   const phone = getUserConfig(userKey, 'PHONE_NUMBER') || '';
   const carTitle = getUserConfig(userKey, 'CAR_TITLE') || '车主A888';
   const phoneHtml = phone ? '<a href="tel:' + phone + '" class="btn-phone">📞 拨打车主电话</a>' : '';
   
-  // 提取后四位，如果carTitle长度>=4，取后四位，否则取整个字符串（可能长度不足，但这种情况一般不会发生）
+  // 提取后四位，如果carTitle长度>=4，取后四位，否则取整个字符串
   const lastFour = carTitle.length >= 4 ? carTitle.slice(-4) : carTitle;
-  // 是否需要验证：如果carTitle不是默认值'车主'且长度>=4，需要验证；否则跳过验证（直接显示主界面）
+  // 是否需要验证：如果carTitle不是默认值'车主'且长度>=4，需要验证；否则跳过验证
   const needVerify = (carTitle !== '车主' && carTitle.length >= 4);
 
   return new Response(`
@@ -275,6 +276,7 @@ function renderMainPage(origin, userKey) {
     textarea { width: 100%; min-height: 90px; border: 1px solid #eee; border-radius: 14px; padding: 15px; font-size: 16px; outline: none; margin-top: 10px; background:#fcfcfc; resize:none; }
     .tag { display: inline-block; background: #f1f5f9; padding: 10px 16px; border-radius: 20px; font-size: 14px; margin: 5px 3px; cursor: pointer; color:#475569; }
     .btn-main { background: #0093E9; color: white; border: none; padding: 18px; border-radius: 18px; font-size: 18px; font-weight: bold; cursor: pointer; width: 100%; }
+    .btn-main:disabled { background: #94a3b8; cursor: not-allowed; }
     .btn-phone { background: #ef4444; color: white; border: none; padding: 15px; border-radius: 15px; text-decoration: none; text-align: center; font-weight: bold; display: block; margin-top: 10px; }
     .hidden { display: none !important; }
     .map-links { display: flex; gap: 10px; margin-top: 15px; }
@@ -289,6 +291,8 @@ function renderMainPage(origin, userKey) {
     .error-msg { color: #ef4444; font-size: 14px; min-height: 20px; }
     .verify-btn { background: #10b981; color: white; border: none; padding: 16px; border-radius: 18px; font-size: 18px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 10px; }
     .verify-btn:disabled { background: #94a3b8; cursor: not-allowed; }
+    /* 倒计时提示 */
+    .countdown-msg { font-size: 13px; color: #f97316; text-align: center; margin-top: 8px; min-height: 20px; }
   </style>
 </head>
 <body>
@@ -327,6 +331,7 @@ function renderMainPage(origin, userKey) {
       </div>
     </div>
     <div class="card" id="locStatus" style="font-size:13px; color:#94a3b8; text-align:center;">定位请求中...</div>
+    <div class="countdown-msg" id="countdownMsg"></div>
     <button id="notifyBtn" class="btn-main" onclick="sendNotify()">🔔 发送通知</button>
   </div>
 
@@ -356,6 +361,11 @@ function renderMainPage(origin, userKey) {
     const correctLastFour = "${lastFour}";  // 正确的后四位
     const needVerify = ${needVerify ? 'true' : 'false'};
     
+    // 新增：定位就绪标志及倒计时
+    let locationReady = false;
+    let countdown = 30;           // 默认30秒倒计时
+    let countdownInterval = null;
+
     // 会话持久化
     let sessionId = localStorage.getItem('movecar_session_' + userKey);
     if (!sessionId) {
@@ -423,19 +433,74 @@ function renderMainPage(origin, userKey) {
       });
     }
 
-    // 主界面初始化 (原 onload 逻辑)
+    // 主界面初始化
     function initializeMainView() {
-      // 原有的 window.onload 逻辑移到这里
-      checkActiveSession();
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(p => {
-          userLoc = { lat: p.coords.latitude, lng: p.coords.longitude };
-          document.getElementById('locStatus').innerText = '📍 位置已锁定';
-          document.getElementById('locStatus').style.color = '#10b981';
-        }, () => {
-          document.getElementById('locStatus').innerText = '📍 无法获取精确位置';
-        });
+      // 清除可能残留的倒计时
+      if (countdownInterval) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
       }
+      countdown = 30;  // 重置倒计时
+
+      checkActiveSession();
+
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          // 成功回调
+          p => {
+            userLoc = { lat: p.coords.latitude, lng: p.coords.longitude };
+            locationReady = true;
+            document.getElementById('locStatus').innerText = '📍 位置已锁定';
+            document.getElementById('locStatus').style.color = '#10b981';
+            // 如果倒计时还在进行，立即清除并启用按钮
+            if (countdownInterval) {
+              clearInterval(countdownInterval);
+              countdownInterval = null;
+            }
+            document.getElementById('notifyBtn').disabled = false;
+            document.getElementById('countdownMsg').innerText = '';
+          },
+          // 失败回调
+          err => {
+            document.getElementById('locStatus').innerText = '📍 无法获取精确位置';
+            document.getElementById('locStatus').style.color = '#ef4444';
+            // 如果尚未获取到位置，启动倒计时（仅当 locationReady 仍为 false）
+            if (!locationReady && !countdownInterval) {
+              startCountdown();
+            }
+          },
+          // 可选配置
+          { timeout: 10000 }  // 10秒超时
+        );
+      } else {
+        document.getElementById('locStatus').innerText = '📍 浏览器不支持定位';
+        // 同样启动倒计时
+        if (!locationReady && !countdownInterval) {
+          startCountdown();
+        }
+      }
+    }
+
+    // 启动30秒倒计时
+    function startCountdown() {
+      countdown = 30;
+      const btn = document.getElementById('notifyBtn');
+      const msgDiv = document.getElementById('countdownMsg');
+      btn.disabled = true;
+      msgDiv.innerText = \`定位获取失败，等待 \${countdown} 秒后可发送\`;
+
+      countdownInterval = setInterval(() => {
+        countdown--;
+        if (countdown <= 0) {
+          // 倒计时结束，启用按钮，清除定时器
+          clearInterval(countdownInterval);
+          countdownInterval = null;
+          btn.disabled = false;
+          msgDiv.innerText = '现在可以发送通知（位置未获取）';
+        } else {
+          msgDiv.innerText = \`定位获取失败，等待 \${countdown} 秒后可发送\`;
+        }
+      }, 1000);
     }
 
     async function checkActiveSession() {
@@ -453,13 +518,25 @@ function renderMainPage(origin, userKey) {
 
     async function sendNotify() {
       const btn = document.getElementById('notifyBtn');
+      
+      // 定位就绪或倒计时结束均可发送
+      if (locationReady) {
+        // 已获取位置，直接发送
+      } else {
+        if (countdown > 0) {
+          alert(\`尚未获取到您的位置，请等待 \${countdown} 秒后再试\`);
+          return;
+        }
+        // 倒计时结束但位置仍为 null，允许发送（无位置）
+      }
+
       btn.disabled = true; btn.innerText = '正在联络车主...';
       try {
         const res = await fetch('/api/notify?u=' + userKey, {
           method: 'POST',
           body: JSON.stringify({ 
             message: document.getElementById('msgInput').value, 
-            location: userLoc,
+            location: userLoc,   // 可能为 null
             sessionId: sessionId 
           })
         });
@@ -467,8 +544,15 @@ function renderMainPage(origin, userKey) {
         if (data.success) {
           showSuccess({status: 'waiting'});
           pollStatus();
-        } else { alert(data.error); btn.disabled = false; btn.innerText = '🔔 发送通知'; }
-      } catch(e) { alert('服务暂时不可用'); btn.disabled = false; }
+        } else { 
+          alert(data.error); 
+          btn.disabled = false; 
+          btn.innerText = '🔔 发送通知'; 
+        }
+      } catch(e) { 
+        alert('服务暂时不可用'); 
+        btn.disabled = false; 
+      }
     }
 
     function showSuccess(data) {
