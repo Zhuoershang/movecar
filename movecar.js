@@ -96,6 +96,8 @@ async function handleNotify(request, url, userKey) {
 
     const ppToken = getUserConfig(userKey, 'PUSHPLUS_TOKEN');
     const barkUrl = getUserConfig(userKey, 'BARK_URL');
+    const email   = getUserConfig(userKey, 'EMAIL');
+    
     const carTitle = getUserConfig(userKey, 'CAR_TITLE') || '车主';
     const baseDomain = (typeof globalThis.EXTERNAL_URL !== 'undefined' && globalThis.EXTERNAL_URL) ? globalThis.EXTERNAL_URL.replace(/\/$/, "") : url.origin;
     const confirmUrl = baseDomain + "/owner-confirm?u=" + userKey;
@@ -116,6 +118,8 @@ async function handleNotify(request, url, userKey) {
     const tasks = [];
     if (ppToken) tasks.push(fetch('http://www.pushplus.plus/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: ppToken, title: "🚗 挪车请求：" + carTitle, content: notifyText.replace(/\\n/g, '<br>') + '<br><br><a href="' + confirmUrl + '" style="font-size:18px;color:#0093E9">【点击处理】</a>', template: 'html' }) }));
     if (barkUrl) tasks.push(fetch(barkUrl + "/" + encodeURIComponent('挪车请求') + "/" + encodeURIComponent(notifyText) + "?url=" + encodeURIComponent(confirmUrl)));
+    // 待增加邮件推送
+    // if (email) tasks.push()
 
     await Promise.all(tasks);
     return new Response(JSON.stringify({ success: true }));
