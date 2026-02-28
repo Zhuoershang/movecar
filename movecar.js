@@ -805,10 +805,10 @@ function renderOwnerPage(userKey) {
       <div id="foldContent" class="fold-content">
         <textarea id="customReply" class="textarea-reply" placeholder="请输入您的回复..."></textarea>
         <div style="margin-top:5px">
-          <span class="tag" onclick="setReplyTag('定位错误，请确认')">🚫 定位错误</span>
-          <span class="tag" onclick="setReplyTag('暂时无法离开，稍后')">⏳ 暂时无法离开</span>
-          <span class="tag" onclick="setReplyTag('请稍等，马上到')">🏃 马上到</span>
-          <span class="tag" onclick="setReplyTag('请拨打联系电话')">📞 拨打电话</span>
+          <span class="tag" onclick="setReplyTag('🚫 定位错误，请确认在车旁?')">🚫 定位错误</span>
+          <span class="tag" onclick="setReplyTag('⏳ 我暂时没法离开，等一会才能来···')">⏳ 暂时无法离开</span>
+          <span class="tag" onclick="setReplyTag('🏃 请稍等，🐎上到')">🏃 马上到</span>
+          <span class="tag" onclick="setReplyTag('📞 请拨打联系电话')">📞 拨打电话</span>
         </div>
         <button id="sendCustomBtn" class="btn-send" onclick="sendCustomReply()">📨 发送回复</button>
         <!-- 新增：显示自己的回复时间 -->
@@ -940,7 +940,7 @@ function renderOwnerPage(userKey) {
 
     // 默认的“我已知晓马上过去”按钮调用
     function confirmMove() {
-      sendConfirmWithReply('马上到');
+      sendConfirmWithReply('🚀 马上到');
     }
 
     // 自定义回复发送
