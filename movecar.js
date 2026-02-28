@@ -13,6 +13,16 @@ const CONFIG = {
   RATE_LIMIT_TTL: 60    // 频率限制：60 秒
 }
 
+// 添加一个简单的 HTML 转义函数（放在文件顶部或 handleRequest 之前）
+function escapeHtml(unsafe) {
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 async function handleRequest(request) {
   const url = new URL(request.url)
   const path = url.pathname
@@ -152,7 +162,7 @@ async function handleNotify(request, url, userKey) {
           })
         }).catch(e => console.error('Resend error:', e))
       );
-    };
+    }
     await Promise.all(tasks);
     return new Response(JSON.stringify({ success: true }));
   } catch (e) {
