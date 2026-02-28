@@ -250,6 +250,259 @@ function renderQRPage(origin, userKey) {
 /** 界面渲染：扫码者页 **/
 function renderMainPage(origin, userKey) {
   const phone = getUserConfig(userKey, 'PHONE_NUMBER') || '';
+  const carTitle = getUserConfig(userKey, 'CAR_TITLE') || '车主8888';
+  const phoneHtml = phone ? '<a href="tel:' + phone + '" class="btn-phone">📞 拨打车主电话</a>' : '';
+  
+  // 提取后四位，如果carTitle长度>=4，取后四位，否则取整个字符串（可能长度不足，但这种情况一般不会发生）
+  const lastFour = carTitle.length >= 4 ? carTitle.slice(-4) : carTitle;
+  // 是否需要验证：如果carTitle不是默认值'车主'且长度>=4，需要验证；否则跳过验证（直接显示主界面）
+  const needVerify = (carTitle !== '车主' && carTitle.length >= 4);
+
+  return new Response(`
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
+  <title>挪车通知</title>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
+    body { font-family: -apple-system, sans-serif; background: linear-gradient(160deg, #0093E9 0%, #80D0C7 100%); min-height: 100vh; padding: 20px; display: flex; justify-content: center; }
+    .container { width: 100%; max-width: 500px; display: flex; flex-direction: column; gap: 15px; }
+    .card { background: white; border-radius: 24px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+    .header { text-align: center; }
+    .icon-wrap { width: 64px; height: 64px; background: #0093E9; border-radius: 20px; display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; font-size: 32px; color: white; }
+    textarea { width: 100%; min-height: 90px; border: 1px solid #eee; border-radius: 14px; padding: 15px; font-size: 16px; outline: none; margin-top: 10px; background:#fcfcfc; resize:none; }
+    .tag { display: inline-block; background: #f1f5f9; padding: 10px 16px; border-radius: 20px; font-size: 14px; margin: 5px 3px; cursor: pointer; color:#475569; }
+    .btn-main { background: #0093E9; color: white; border: none; padding: 18px; border-radius: 18px; font-size: 18px; font-weight: bold; cursor: pointer; width: 100%; }
+    .btn-phone { background: #ef4444; color: white; border: none; padding: 15px; border-radius: 15px; text-decoration: none; text-align: center; font-weight: bold; display: block; margin-top: 10px; }
+    .hidden { display: none !important; }
+    .map-links { display: flex; gap: 10px; margin-top: 15px; }
+    .map-btn { flex: 1; padding: 14px; border-radius: 14px; text-align: center; text-decoration: none; color: white; font-weight: bold; }
+    .amap { background: #1890ff; } .apple { background: #000; }
+    /* 验证码输入框样式 */
+    .verify-container { text-align: center; margin-bottom: 20px; }
+    .verify-title { font-size: 16px; color: #1e293b; margin-bottom: 15px; }
+    .code-inputs { display: flex; justify-content: center; gap: 10px; margin: 20px 0; }
+    .code-inputs input { width: 60px; height: 70px; text-align: center; font-size: 32px; font-weight: bold; border: 2px solid #e2e8f0; border-radius: 12px; outline: none; transition: border 0.2s; background: #f8fafc; }
+    .code-inputs input:focus { border-color: #0093E9; }
+    .error-msg { color: #ef4444; font-size: 14px; min-height: 20px; }
+    .verify-btn { background: #10b981; color: white; border: none; padding: 16px; border-radius: 18px; font-size: 18px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 10px; }
+    .verify-btn:disabled { background: #94a3b8; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <!-- 验证界面 (初始显示) -->
+  <div class="container" id="verifyView" ${needVerify ? '' : 'style="display:none"'}>
+    <div class="card">
+      <div class="icon-wrap">🔐</div>
+      <h2 style="color:#1e293b">验证车牌</h2>
+      <p style="color:#64748b; margin-top:5px">请输入车牌号后四位</p>
+      <div class="code-inputs" id="codeInputs">
+        <input type="text" maxlength="1" pattern="[A-Za-z0-9]" class="code-digit" inputmode="text" autofocus>
+        <input type="text" maxlength="1" pattern="[A-Za-z0-9]" class="code-digit" inputmode="text">
+        <input type="text" maxlength="1" pattern="[A-Za-z0-9]" class="code-digit" inputmode="text">
+        <input type="text" maxlength="1" pattern="[A-Za-z0-9]" class="code-digit" inputmode="text">
+      </div>
+      <div class="error-msg" id="verifyError"></div>
+      <button class="verify-btn" id="verifyBtn">验证</button>
+    </div>
+  </div>
+
+  <!-- 主界面 (初始可能隐藏) -->
+  <div class="container ${needVerify ? 'hidden' : ''}" id="mainView">
+    <div class="card header">
+      <div class="icon-wrap">🚗</div>
+      <h2 style="color:#1e293b">呼叫 ${carTitle}</h2>
+      <p style="color:#64748b; font-size:14px; margin-top:5px">提示：车主将收到即时提醒</p>
+    </div>
+    <div class="card">
+      <textarea id="msgInput" placeholder="请输入留言..."></textarea>
+      <div style="margin-top:5px">
+        <div class="tag" onclick="setTag('麻烦挪下车，谢谢')">🚧 挡路了</div>
+        <div class="tag" onclick="setTag('临时停靠，请包涵')">⏱️ 临停</div>
+        <div class="tag" onclick="setTag('有急事外出，速来')">🏃 急事</div>
+      </div>
+    </div>
+    <div class="card" id="locStatus" style="font-size:13px; color:#94a3b8; text-align:center;">定位请求中...</div>
+    <button id="notifyBtn" class="btn-main" onclick="sendNotify()">🔔 发送通知</button>
+  </div>
+
+  <div class="container hidden" id="successView">
+    <div class="card" style="text-align:center">
+      <div style="font-size:64px; margin-bottom:15px">📧</div>
+      <h2 style="color:#1e293b">通知已送达</h2>
+      <p style="color:#64748b">车主已收到挪车请求，请在车旁稍候</p>
+    </div>
+    <div id="ownerFeedback" class="card hidden" style="text-align:center; border: 2.5px solid #10b981;">
+      <div style="font-size:40px">👨‍✈️</div>
+      <h3 style="color:#059669">车主回复：马上到</h3>
+      <div class="map-links">
+        <a id="ownerAmap" href="#" class="map-btn amap">高德地图</a>
+        <a id="ownerApple" href="#" class="map-btn apple">苹果地图</a>
+      </div>
+    </div>
+    <div>
+      <button class="btn-main" style="background:#f59e0b; margin-top:10px;" onclick="location.reload()">🔄 刷新状态</button>
+      ${phoneHtml}
+    </div>
+  </div>
+
+  <script>
+    let userLoc = null;
+    const userKey = "${userKey}";
+    const correctLastFour = "${lastFour}";  // 正确的后四位
+    const needVerify = ${needVerify ? 'true' : 'false'};
+    
+    // 会话持久化
+    let sessionId = localStorage.getItem('movecar_session_' + userKey);
+    if (!sessionId) {
+      sessionId = Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      localStorage.setItem('movecar_session_' + userKey, sessionId);
+    }
+
+    // 如果不需要验证，直接初始化主界面
+    if (!needVerify) {
+      initializeMainView();
+    } else {
+      // 初始化验证界面
+      initializeVerifyView();
+    }
+
+    // 验证界面初始化
+    function initializeVerifyView() {
+      const inputs = document.querySelectorAll('.code-digit');
+      const verifyBtn = document.getElementById('verifyBtn');
+      const errorDiv = document.getElementById('verifyError');
+
+      // 自动聚焦和跳转
+      inputs.forEach((input, index) => {
+        input.addEventListener('input', (e) => {
+          // 只允许字母数字（可自行扩展）
+          e.target.value = e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+          if (e.target.value && index < inputs.length - 1) {
+            inputs[index + 1].focus();
+          }
+        });
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Backspace' && !e.target.value && index > 0) {
+            inputs[index - 1].focus();
+          }
+        });
+        // 限制粘贴行为，简单处理：阻止粘贴
+        input.addEventListener('paste', (e) => e.preventDefault());
+      });
+
+      verifyBtn.addEventListener('click', () => {
+        const code = Array.from(inputs).map(i => i.value).join('');
+        if (code.length !== 4) {
+          errorDiv.textContent = '请输入四位验证码';
+          return;
+        }
+        // 比较（忽略大小写，统一转大写）
+        if (code.toUpperCase() === correctLastFour.toUpperCase()) {
+          // 验证成功，隐藏验证界面，显示主界面
+          document.getElementById('verifyView').style.display = 'none';
+          document.getElementById('mainView').classList.remove('hidden');
+          initializeMainView(); // 初始化主界面功能
+        } else {
+          errorDiv.textContent = '验证码错误，请重新输入';
+          // 清空输入框
+          inputs.forEach(i => i.value = '');
+          inputs[0].focus();
+        }
+      });
+
+      // 可选：回车键触发验证
+      inputs.forEach(input => {
+        input.addEventListener('keypress', (e) => {
+          if (e.key === 'Enter') verifyBtn.click();
+        });
+      });
+    }
+
+    // 主界面初始化 (原 onload 逻辑)
+    function initializeMainView() {
+      // 原有的 window.onload 逻辑移到这里
+      checkActiveSession();
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(p => {
+          userLoc = { lat: p.coords.latitude, lng: p.coords.longitude };
+          document.getElementById('locStatus').innerText = '📍 位置已锁定';
+          document.getElementById('locStatus').style.color = '#10b981';
+        }, () => {
+          document.getElementById('locStatus').innerText = '📍 无法获取精确位置';
+        });
+      }
+    }
+
+    async function checkActiveSession() {
+      try {
+        const res = await fetch('/api/check-status?u=' + userKey + '&s=' + sessionId);
+        const data = await res.json();
+        if (data.status && data.status !== 'none') {
+          showSuccess(data);
+          pollStatus();
+        }
+      } catch(e){}
+    }
+
+    function setTag(t) { document.getElementById('msgInput').value = t; }
+
+    async function sendNotify() {
+      const btn = document.getElementById('notifyBtn');
+      btn.disabled = true; btn.innerText = '正在联络车主...';
+      try {
+        const res = await fetch('/api/notify?u=' + userKey, {
+          method: 'POST',
+          body: JSON.stringify({ 
+            message: document.getElementById('msgInput').value, 
+            location: userLoc,
+            sessionId: sessionId 
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showSuccess({status: 'waiting'});
+          pollStatus();
+        } else { alert(data.error); btn.disabled = false; btn.innerText = '🔔 发送通知'; }
+      } catch(e) { alert('服务暂时不可用'); btn.disabled = false; }
+    }
+
+    function showSuccess(data) {
+      document.getElementById('mainView').classList.add('hidden');
+      document.getElementById('successView').classList.remove('hidden');
+      updateUI(data);
+    }
+
+    function updateUI(data) {
+      if (data.status === 'confirmed') {
+        document.getElementById('ownerFeedback').classList.remove('hidden');
+        if (data.ownerLocation) {
+          document.getElementById('ownerAmap').href = data.ownerLocation.amapUrl;
+          document.getElementById('ownerApple').href = data.ownerLocation.appleUrl;
+        }
+      }
+    }
+
+    function pollStatus() {
+      setInterval(async () => {
+        try {
+          const res = await fetch('/api/check-status?u=' + userKey + '&s=' + sessionId);
+          const data = await res.json();
+          updateUI(data);
+        } catch(e){}
+      }, 5000);
+    }
+  </script>
+</body>
+</html>
+`, { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
+}
+
+/**
+function renderMainPage(origin, userKey) {
+  const phone = getUserConfig(userKey, 'PHONE_NUMBER') || '';
   const carTitle = getUserConfig(userKey, 'CAR_TITLE') || '车主';
   const phoneHtml = phone ? '<a href="tel:' + phone + '" class="btn-phone">📞 拨打车主电话</a>' : '';
 
@@ -405,7 +658,7 @@ function renderMainPage(origin, userKey) {
 </html>
 `, { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
 }
-
+**/
 /** 界面渲染：车主页 **/
 function renderOwnerPage(userKey) {
   const carTitle = getUserConfig(userKey, 'CAR_TITLE') || '车主';
