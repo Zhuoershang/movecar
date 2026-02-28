@@ -112,12 +112,13 @@ async function handleNotify(request, url, userKey) {
 
     const body = await request.json();
     const sessionId = body.sessionId; 
+    const clientTimestamp = body.clientTimestamp || Date.now(); // 接收前端时间戳，兼容旧请求
 
     const ppToken = getUserConfig(userKey, 'PUSHPLUS_TOKEN');
     const barkUrl = getUserConfig(userKey, 'BARK_URL');
     const email   = getUserConfig(userKey, 'EMAIL');
-    const resendApiKey = getUserConfig("", 'RESEND_API_KEY');//直接获取resend全局key，所有用户通用
-    const resendFrom = getUserConfig("", 'RESEND_FROM') || 'noreply_huang@xian5.de5.net'; // 默认测试邮箱
+    const resendApiKey = getUserConfig("", 'RESEND_API_KEY');
+    const resendFrom = getUserConfig("", 'RESEND_FROM') || 'noreply_huang@xian5.de5.net';
     
     const carTitle = getUserConfig(userKey, 'CAR_TITLE') || '车主';
     const baseDomain = (typeof globalThis.EXTERNAL_URL !== 'undefined' && globalThis.EXTERNAL_URL) ? globalThis.EXTERNAL_URL.replace(/\/$/, "") : url.origin;
@@ -125,8 +126,8 @@ async function handleNotify(request, url, userKey) {
 
     let notifyText = "🚗 挪车请求【" + carTitle + "】\\n💬 留言: " + (body.message || '车旁有人等待');
     
-    // 存储当前会话信息，有效期设为 30 分钟
-    const statusData = { status: 'waiting', sessionId: sessionId };
+    // 存储当前会话信息，包含发送时间戳
+    const statusData = { status: 'waiting', sessionId: sessionId, sentAt: clientTimestamp };
     
     let maps = null;
     if (body.location && body.location.lat) {
@@ -140,10 +141,7 @@ async function handleNotify(request, url, userKey) {
     const tasks = [];
     if (ppToken) tasks.push(fetch('http://www.pushplus.plus/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: ppToken, title: "🚗 挪车请求：" + carTitle, content: notifyText.replace(/\\n/g, '<br>') + '<br><br><a href="' + confirmUrl + '" style="font-size:18px;color:#0093E9">【点击处理】</a>', template: 'html' }) }));
     if (barkUrl) tasks.push(fetch(barkUrl + "/" + encodeURIComponent('挪车请求') + "/" + encodeURIComponent(notifyText) + "?url=" + encodeURIComponent(confirmUrl)));
-    // 待增加邮件推送
-    // if (email) tasks.push()
     if (email && resendApiKey) {
-        // 构造邮件 HTML 内容（转义用户输入）
       const escapedMessage = escapeHtml(body.message || '车旁有人等待');
       let locationHtml = '';
       if (maps) {
@@ -180,6 +178,7 @@ async function handleNotify(request, url, userKey) {
   }
 }
 
+/** 状态检查函数 **/
 async function handleCheckStatus(userKey, clientSessionId) {
   const data = await MOVE_CAR_STATUS.get("status_" + userKey);
   if (!data) return new Response(JSON.stringify({ status: 'none' }));
@@ -192,7 +191,8 @@ async function handleCheckStatus(userKey, clientSessionId) {
   const ownerLoc = await MOVE_CAR_STATUS.get("owner_loc_" + userKey);
   return new Response(JSON.stringify({ 
     status: statusObj.status, 
-    ownerLocation: ownerLoc ? JSON.parse(ownerLoc) : null 
+    ownerLocation: ownerLoc ? JSON.parse(ownerLoc) : null,
+    sentAt: statusObj.sentAt || null
   }));
 }
 
@@ -371,6 +371,7 @@ function renderMainPage(origin, userKey) {
       <div style="font-size:64px; margin-bottom:15px">📧</div>
       <h2 style="color:#1e293b">通知已送达</h2>
       <p style="color:#64748b">车主已收到挪车请求，请在车旁稍候</p>
+      <p id="sentTimeDisplay" style="font-size:12px; color:#888; margin-top:5px;"></p>
     </div>
     <div id="ownerFeedback" class="card hidden" style="text-align:center; border: 2.5px solid #10b981;">
       <div style="font-size:40px">👨‍✈️</div>
@@ -666,12 +667,13 @@ function renderMainPage(origin, userKey) {
           body: JSON.stringify({ 
             message: document.getElementById('msgInput').value, 
             location: userLoc,
-            sessionId: sessionId 
+            sessionId: sessionId,
+            clientTimestamp: Date.now()  // 新增：发送时的时间戳
           })
         });
         const data = await res.json();
         if (data.success) {
-          showSuccess({status: 'waiting'});
+          showSuccess({status: 'waiting', sentAt: Date.now()}); // 立即显示，同时后续轮询会覆盖
           pollStatus();
         } else { 
           alert(data.error); 
@@ -692,6 +694,16 @@ function renderMainPage(origin, userKey) {
 
     function updateUI(data) {
       console.log('updateUI called with data:', data);
+      
+      // 更新发送时间显示
+      const timeDisplay = document.getElementById('sentTimeDisplay');
+      if (data.sentAt) {
+        const seconds = Math.floor((Date.now() - data.sentAt) / 1000);
+        timeDisplay.innerText = `（发送于 ${seconds} 秒前）`;
+      } else {
+        timeDisplay.innerText = '';
+      }
+    
       if (data.status === 'confirmed') {
         document.getElementById('ownerFeedback').classList.remove('hidden');
         const replyMsg = data.ownerLocation?.replyMessage || '车主已确认，马上到';
