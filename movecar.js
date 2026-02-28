@@ -250,7 +250,7 @@ function renderQRPage(origin, userKey) {
 /** 界面渲染：扫码者页 **/
 function renderMainPage(origin, userKey) {
   const phone = getUserConfig(userKey, 'PHONE_NUMBER') || '';
-  const carTitle = getUserConfig(userKey, 'CAR_TITLE') || '车主8888';
+  const carTitle = getUserConfig(userKey, 'CAR_TITLE') || '车主A888';
   const phoneHtml = phone ? '<a href="tel:' + phone + '" class="btn-phone">📞 拨打车主电话</a>' : '';
   
   // 提取后四位，如果carTitle长度>=4，取后四位，否则取整个字符串（可能长度不足，但这种情况一般不会发生）
@@ -320,8 +320,10 @@ function renderMainPage(origin, userKey) {
       <textarea id="msgInput" placeholder="请输入留言..."></textarea>
       <div style="margin-top:5px">
         <div class="tag" onclick="setTag('麻烦挪下车，谢谢')">🚧 挡路了</div>
-        <div class="tag" onclick="setTag('临时停靠，请包涵')">⏱️ 临停</div>
         <div class="tag" onclick="setTag('有急事外出，速来')">🏃 急事</div>
+        <div class="tag" onclick="setTag('有叔叔贴条，速度来挪车！')">⏱️ 温馨提醒</div>
+        <div class="tag" onclick="setTag('请挪车，我在你车旁，请查看位置，尽快前来！')">🏃 发送我的位置</div>
+        <div class="tag" onclick="setTag('这是我的车位，我要用了，谢谢')">🚧 占我车位</div>
       </div>
     </div>
     <div class="card" id="locStatus" style="font-size:13px; color:#94a3b8; text-align:center;">定位请求中...</div>
