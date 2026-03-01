@@ -30,7 +30,7 @@ async function handleRequest(request) {
   // 安全防护
   const country = request.cf?.country;
   if (country && country !== 'CN') {
-    return new Response('Access Denied', { status: 403 });
+    return new Response('Access Denied', { status: 208 });
   }
   
   const url = new URL(request.url)
