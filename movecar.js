@@ -153,7 +153,7 @@ async function handleNotify(request, url, userKey) {
 
     const tasks = [];
     // if (ppToken) tasks.push(fetch('http://www.pushplus.plus/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: ppToken, title: "🚗 挪车请求：" + carTitle, content: notifyText.replace(/\\n/g, '<br>') + '<br><br><a href="' + confirmUrl + '" style="font-size:18px;color:#0093E9">【点击处理】</a>', template: 'html' }) }));
-    if (FlareMsgToken) tasks.push(fetch('https://flaremsg.xian5.de5.net/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: FlareMsgToken, from: "🚗" + carTitle, desc: notifyText.replace(/\\n/g, '<br>') + '<br><br><a href="' + confirmUrl + '" style="font-size:18px;color:#0093E9">【点击处理】</a>', remark: statusData.sentAt, url: confirmUrl }) }));
+    if (FlareMsgToken) tasks.push(fetch('https://flaremsg.xian5.de5.net/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: FlareMsgToken, temp: FlareMsgTempID,from: "🚗" + carTitle, desc: notifyText.replace(/\\n/g, '<br>') + '<br><br><a href="' + confirmUrl + '" style="font-size:18px;color:#0093E9">【点击处理】</a>', remark: statusData.sentAt, url: confirmUrl }) }));
     if (barkUrl) tasks.push(fetch(barkUrl + "/" + encodeURIComponent('挪车请求') + "/" + encodeURIComponent(notifyText) + "?url=" + encodeURIComponent(confirmUrl)));
     if (email && resendApiKey) {
       const escapedMessage = escapeHtml(body.message || '车旁有人等待');
